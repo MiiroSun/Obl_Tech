@@ -15,12 +15,15 @@ type Track struct {
 }
 
 /*
-    client - получаем структуру клиента
+    Метод для запуска дорожки 
+     client - получаем структуру клиента
      doneChan - Канал для отправки, в него отправляем структуру "Track"
-    resultChan - Канал для отправки, в него отправляем структуру со Статистикой
-     Start запускает игру асинхронно и сразу возвращает управление
+     resultChan - Канал для отправки, в него отправляем структуру "GameResult"
+     return: В потоках возвращается объект дорожки и статистики по этой дорожке
 */
 func (t *Track) Start(client *Client, doneChan chan<- *Track, resultChan chan<- GameResult) {
+    //Инициализация дорожки
+    // Сделал так, чтобы иницилазиция была конкретной дорожки 
     t.mu.Lock()
     t.use = true 
     t.client = client 
@@ -31,7 +34,14 @@ func (t *Track) Start(client *Client, doneChan chan<- *Track, resultChan chan<- 
     go t.playGame(client, startTime, doneChan, resultChan)
 }
 
-// Запуск игры
+/*
+    Метод для запуска игры
+     client - Структура клиента
+     startTime - Время начала TODO: Мб всё таки внутри запуска игры ?
+     doneChan - Поток с Track 
+     resultChan - Поток со статистикой
+     return: В каналах возвращается пустая дорожка (игра заканчивается) и заполненная статистика
+*/
 func (t *Track) playGame(client *Client, startTime time.Time, doneChan chan<- *Track, resultChan chan<- GameResult) {
     defer func() {
         t.mu.Lock()
@@ -39,7 +49,7 @@ func (t *Track) playGame(client *Client, startTime time.Time, doneChan chan<- *T
         t.client = nil
         t.mu.Unlock()
 
-        doneChan <- t // дорожка освободилась
+        doneChan <- t // дорожка освободилась. Возвращаю структуру, т.к. дорожек то у меня n и создавать новые нет необходимости, работаю с одним объектом
     }()
 
     endTime := startTime.Add(client.playTime)
@@ -60,11 +70,12 @@ func (t *Track) playGame(client *Client, startTime time.Time, doneChan chan<- *T
         }
     }
 
+    // По логике, тут храним статистику по только что завершённой игре 
     result := GameResult{
         clientId:      client.id,
         trackId:       t.id,
         timeGameStart: startTime,
-        timeGameEnd:   time.Now(), // реальное время окончания
+        timeGameEnd:   time.Now(), 
         score:         score,
     }
 
