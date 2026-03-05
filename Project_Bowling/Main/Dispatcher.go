@@ -3,23 +3,31 @@ package main
 import (
 	"fmt"
 	"time"
+	"sync"
 )
 
 //Dispatcher
 type Dispatcher struct{
 	 tracks      []*Track        // Список дорожек
      queue       []Client        // Очередь ожидания
+	 queueMu	 sync.Mutex
 	 doneTrack   chan *Track     // Поток для свободных дорожек
 	 resultGame  chan GameResult // Поток для результата игр
-   
+	 results     []GameResult
+	 resultsMu   sync.Mutex
+	 activeGame  int
+	 countClient int
+	 totalClient int
 }
 
 // Метод который запускается из main 
 func(t *Dispatcher) StartSystem(config Config){
 
-	resultClient := make(chan Client, config.quantityClient)
-	resultGame := make(chan GameResult, config.quantityClient)
-	doneTrack := make(chan *Track, config.quantityTracks)
+	resultClient := make(chan Client, config.quantityClient) // Созданные клиенты
+	t.resultGame = make(chan GameResult, config.quantityClient) // результаты игры
+	t.doneTrack = make(chan *Track, config.quantityTracks) // Свободный трек
+
+	t.totalClient = config.quantityClient
 
 	// Вызываем метод для создания клиентов 
 	client := &Client{}
@@ -36,24 +44,28 @@ func(t *Dispatcher) StartSystem(config Config){
 		case newClient := <- resultClient:
 			fmt.Printf("Клиент %s пришёл в %s\n", newClient.name, newClient.arrivalTime.Format("00:00:00"))
 			t.handleNewClient(newClient)
+			t.displayGameStatus()
 		
-		case freeTrack := <- doneTrack:
+		case freeTrack := <- t.doneTrack:
 			fmt.Printf("Дорожка %d освободилась\n", freeTrack.id)
 			t.handleFreeTrack(freeTrack)
 		
-		case GameResult := <- resultGame:
+		case GameResult := <- t.resultGame:
 			t.handleGameResult(GameResult)
+			//Смотрим текущие игры, если счётчик меняется - информируем
+			t.displayGameStatus()
+			
+		if t.checkCompletion() {
+			return
 		}
-
-		//Смотрим текущие игры, если счётчик меняется - информируем
-		t.displayGameStatus()
+		}
 	}
 }
 
 //region Первичная обработка
 
 // Обрабатываем нового клиента
-func(t *Dispatcher) handleNewClient(client Client){
+func(t *Dispatcher) handleNewClient(client Client) {
 	//Смотрим, есть ли свободная дорожка
 	for _, track := range t.tracks {
 		track.mu.Lock()
@@ -74,20 +86,26 @@ func(t *Dispatcher) handleNewClient(client Client){
 func(t *Dispatcher) startGameOnTrack(track *Track, client Client) {
 	fmt.Printf("Клиент %s начал игру на дорожке %d, будет играть %v\n",
 		client.name, track.id, client.playTime)	
+	t.activeGame++  
 
 	go track.Start(&client, t.doneTrack, t.resultGame)
 }
 
 func(t *Dispatcher) handleFreeTrack(track *Track) {
+	t.queueMu.Lock()
 	// ПРоверяем есть ли кто в очереди
 	if len(t.queue) > 0 {
 		nextClient := t.queue[0]
 		t.queue = t.queue[1:]
-
+		t.queueMu.Unlock()
+		
 		fmt.Printf("Клиенту %s назначена дорожка %d\n", nextClient.name, track.id)
+		t.activeGame++  
 
 		// Запускаем игру
 		go track.Start(&nextClient, t.doneTrack, t.resultGame)
+	} else {
+		t.queueMu.Unlock()
 	}
 }
 
@@ -95,7 +113,10 @@ func(t *Dispatcher) handleFreeTrack(track *Track) {
 
 //region Очередь
 func(t *Dispatcher) addToQueue(client Client) {
+	t.queueMu.Lock()
 	t.queue = append(t.queue, client)
+	t.queueMu.Unlock()
+
 	fmt.Printf("Клиент %s добавлен в очередь. Клиентов в очереди: %d\n",
 			client.name, len(t.queue))
 
@@ -109,16 +130,20 @@ func(t *Dispatcher) startWaitTimer(client Client) {
 	defer timer.Stop()
 
 	<-timer.C
-	t.removeFromQueue(client)
+	t.removeFromQueue(client.id)
 }
 
 // Удаление из очереди
-func(t *Dispatcher) removeFromQueue(client Client) {
+func(t *Dispatcher) removeFromQueue(clientId int) {
+	t.queueMu.Lock()
+	defer t.queueMu.Unlock()
+	
 	for i, c := range t.queue {
-		if c.id == client.id {
+		if c.id == clientId {
 			t.queue = append(t.queue[:i], t.queue[i+1:]... )
 			fmt.Printf("Клиент %s не стал ждать и ушел. Клиентов в очереди: %d\n", 
-				client.name, len(t.queue))
+				c.name, len(t.queue))
+			t.countClient++
 			break
 		}
 	}
@@ -130,12 +155,23 @@ func(t *Dispatcher) removeFromQueue(client Client) {
 
 //Обрабатываем результаты игры
 func(t *Dispatcher) handleGameResult(result GameResult) {
+	t.activeGame--
+	t.countClient++
+
+	t.resultsMu.Lock()
+	t.results = append(t.results, result)
+	t.resultsMu.Unlock()
+	
 	fmt.Printf("Игра завершена: клиент %d на дорожке %d, счёт: %d, время игры: %v\n",
 		result.clientId, result.trackId, result.score, result.timeGameEnd.Sub(result.timeGameStart))
 }
 
 // Информация
 func (t *Dispatcher) displayGameStatus() {
+
+	t.queueMu.Lock()
+	defer t.queueMu.Unlock()
+
 	//Информация о текущих играх
 	fmt.Println("\n ТЕКУЩИЕ ИГРЫ")
 
@@ -158,6 +194,40 @@ func (t *Dispatcher) displayGameStatus() {
 		}
 	}
 	fmt.Println()
+}
+
+//Проверка нужно ли "закрываться"
+func (t *Dispatcher) checkCompletion() bool{
+	t.queueMu.Lock()
+	queueLen := len(t.queue)
+	t.queueMu.Unlock()
+
+	if queueLen == 0 && t.activeGame == 0 && t.countClient == t.totalClient {
+			return t.printFinalStats()
+	}	
+	return false 
+}
+
+//Выводим итоговую статистику и завершаем приложение
+func(t *Dispatcher) printFinalStats() bool{
+	fmt.Println("ИТОГИ")
+	t.resultsMu.Lock()
+	defer t.resultsMu.Unlock()
+
+		fmt.Printf("%-10s %-15s %-15s %-12s %-10s\n", 
+		"Клиент", "Время прихода", "Длительность", "Дорожка", "Счёт")
+		fmt.Println("------------------------------------------------")
+	
+	for _, r := range t.results {
+
+		fmt.Printf("%-10d %-15s %-15v %-12d %-10d\n",
+			r.clientId,
+			r.timeGameStart.Format("15:04:05"),
+			r.timeGameEnd.Sub(r.timeGameStart).Round(time.Second),
+			r.trackId,
+			r.score)
+	}
+	return true
 }
 
 //endregion

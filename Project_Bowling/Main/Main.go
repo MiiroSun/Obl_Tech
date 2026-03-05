@@ -24,12 +24,12 @@ func main() {
 
 	//Конфиг
 	config := Config{
-		quantityTracks: 3,
-		quantityClient: 8, 
-		maxClientInterval: 1 ,  // Максимальное время в рамках которого будут "приходить" клиенты (кол-во минут) 
-		maxWaitTime: 30 * time.Minute,      // ждут 30 секунд
-	gameTimeMin:       10 * time.Second,      // играют 10-30 секунд
-	gameTimeMax:       30 * time.Second,
+	quantityTracks:		3,						// Сколько дорожек
+	quantityClient:		8, 						// Сколько клиентов будет
+	maxClientInterval:  1,						// Максимальное время в рамках которого будут "приходить" клиенты (кол-во минут) 
+	maxWaitTime: 		20 * time.Second,		// Сколько будут ждать (сек)
+	gameTimeMin:		10 * time.Second,		// Мин. время игры (сек)
+	gameTimeMax:		30 * time.Second,		// Макс. время игры (сек)
 	}
 
 	fmt.Println("=== СИСТЕМА БОУЛИНГ-КЛУБА ЗАПУЩЕНА ===")
@@ -47,14 +47,6 @@ func main() {
 		resultGame: make(chan GameResult, config.quantityClient),
 	}
 
-	// Запускаем систему (блокирующий вызов)
+	// Запускаем систему
 	dispatcher.StartSystem(config)
 }
-
-/* Проблемы:
-1. Не показывает если клиент ушёл
-2. Не показывает набранные очки клиента
-3. Не корректно отображается время прибытия клиента
-4. Не отображается информация о том, что игра завершена 
-
-*/

@@ -24,7 +24,7 @@ type Client struct {
      resultClient - поток в котором будут обрабатываться юзеры
      return: Юзеры согласно их времени прихода 
 */
-func (t *Client) CreateClient(config Config,resultClient chan<- Client) {
+func (t *Client) CreateClient(config Config, resultClient chan<- Client) {
    
     var clients []Client
 
