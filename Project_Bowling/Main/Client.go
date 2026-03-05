@@ -29,7 +29,7 @@ func (t *Client) CreateClient(config Config,resultClient chan<- Client) {
     var clients []Client
 
     // Создаём клиентов, кол-во согласно конфигу
-    for clientId := 1;config.quantityClient > clientId; clientId ++ {
+    for clientId := 1;clientId <= config.quantityClient; clientId ++ {
 
         // Генерим массив минут 
         randomMinutes := rand.Intn(config.maxClientInterval + 1) 
