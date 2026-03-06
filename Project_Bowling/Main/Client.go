@@ -9,12 +9,12 @@ import (
 
 // Клиент
 type Client struct {
-	id       int
-	name     string        //Имя
-    arrivalTime time.Time // Время прихода
-	playTime time.Duration // Сколько времени будет играть
-	waitTime time.Duration // Сколько может подождать
-	leave    bool          // Ушел ли клиент
+	id          int
+	name        string          //Имя
+    arrivalTime time.Time       // Время прихода
+	playTime    time.Duration   // Сколько времени будет играть
+	waitTime    time.Duration   // Сколько может подождать
+	leave       bool            // Ушел ли клиент
 }
 
 

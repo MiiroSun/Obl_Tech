@@ -8,16 +8,16 @@ import (
 
 //Dispatcher
 type Dispatcher struct{
-	 tracks      []*Track        // Список дорожек
-     queue       []Client        // Очередь ожидания
+	 tracks      []*Track			// Список дорожек
+     queue       []Client			// Очередь ожидания
 	 queueMu	 sync.Mutex
-	 doneTrack   chan *Track     // Поток для свободных дорожек
-	 resultGame  chan GameResult // Поток для результата игр
-	 results     []GameResult
+	 doneTrack   chan *Track		// Поток для свободных дорожек
+	 resultGame  chan GameResult	// Поток для результата игр
+	 results     []GameResult		// Результаты всех игр
 	 resultsMu   sync.Mutex
-	 activeGame  int
-	 countClient int
-	 totalClient int
+	 activeGame  int				// Кол-во завершённых игр
+	 countClient int				// Кол-во ушедших клиентов
+	 totalClient int				// Общее кол-во клиентов которые сегодня придут 
 }
 
 // Метод который запускается из main 
